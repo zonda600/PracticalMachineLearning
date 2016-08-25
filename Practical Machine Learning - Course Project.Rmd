@@ -1,0 +1,79 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Scott Keefer"
+date: "August 22, 2016"
+output: html_document
+---
+<br>
+**Introduction**<br>
+The goal of this project is to predict the manner in which individuals did the exercises. This report will describe how the model was built, how cross validation was used, the expected output of the sample error, and why specific design as well as analysis choices were made. We will subsequently use this model to predict 20 different test cases.<br><br>
+
+**Background**<br>
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).<br><br>
+
+**Prepare Envrionment and Load Data**<br>
+We will begin by loading both the training data for evaluation as well as the test cases that will be used to evaluate our model. Also loaded will be all required packages for the following procedures.
+```{r}
+library(randomForest)
+library(caret)
+library(rpart)
+download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "pml-training.csv")
+download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile = "pml-testing.csv")
+
+TestData <- read.csv("pml-testing.csv")
+TrainingData <- read.csv("pml-training.csv")
+```
+<br>
+
+**Prepare/Clean Data**<br>
+First, I will remove columns which contan only NA values.
+```{r}
+TestData <- TestData[, colSums(is.na(TestData)) == 0]
+TrainingData <- TrainingData[, colSums(is.na(TrainingData)) == 0]
+```
+
+Next, we clean the data for easier analysis using some of the predictive modeling available in the Random Forest package. We have to look at the data frame to see that the first seven fields as well as the last are not measurements that can be used for evaluation. We should remove them from the dataset and are finally left with 52 fields for evaluation in addition to the Problem ID.
+```{r, cache = T}
+classe <- TrainingData$classe
+TrainingData <- TrainingData[, -c(1, 3:7)]
+TrainingClean <- TrainingData[, sapply(TrainingData, is.numeric)]
+TrainingClean$classe <- classe
+TestData <- TestData[, -c(1, 3:7)]
+TestClean <- TestData[, sapply(TestData, is.numeric)]
+```
+
+These are the fields that will be considered as part of the prediction model.
+```{r, cache = T}
+colnames(TestClean)
+```
+
+Finally, we will split the training data into two data frames; the second will be used for validation purposes to evaluate our prediction model and will include the remainign 25% of records.
+```{r}
+inTrain = createDataPartition(TrainingClean$classe, p = 0.75, list = F)
+TrainingData1 = TrainingClean[inTrain,]
+TestingData2= TrainingClean[-inTrain,]
+```
+<br>
+
+**Modeling**<br>
+The Random Forest method will help us create multiple decision trees resulting in likely possible outcomes of our cases. We will control the Random Forest model to perform a three-fold cross-validation. Note: more folds of validations and/or decision trees might incerease accuracy levels, but latency on my hardware prevented further testing.
+```{r, cache = T}
+RFType <- trainControl(method="cv", 3)
+RandomFrst <- train(classe ~ ., data=TrainingData1, method="rf", trControl=RFType, ntree=200)
+RandomFrst
+```
+
+Testing the accuracy of our models predictivie capabilities is of course important. 
+```{r, cache = T}
+PredictionRF <- predict(RandomFrst, TestingData2)
+confusionMatrix(TestingData2$classe, PredictionRF)
+accuracy <- postResample(PredictionRF, TestingData2$classe)
+accuracy
+```
+As you can see from the results, the accuracys of our model is 99.25% which of course implies our expected out-of-sample-error is 0.75%.
+
+We will apply our model to the test data downloaded at the same source to predict the results of the twenty distinct cases.
+```{r, cache = T}
+result <- predict(RandomFrst, TestClean[, -length(names(TestClean))])
+result
+```  
